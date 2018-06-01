@@ -1,7 +1,7 @@
 //
 //  SwipeView.m
 //
-//  Version 1.3
+//  Version 1.3.2
 //
 //  Created by Nick Lockwood on 03/09/2010.
 //  Copyright 2010 Charcoal Design
@@ -72,7 +72,6 @@
 @property (nonatomic, strong) NSMutableSet *itemViewPool;
 @property (nonatomic, assign) NSInteger previousItemIndex;
 @property (nonatomic, assign) CGPoint previousContentOffset;
-@property (nonatomic, assign) CGRect previousViewFrame;
 @property (nonatomic, assign) CGSize itemSize;
 @property (nonatomic, assign) BOOL suppressScrollEvent;
 @property (nonatomic, assign) NSTimeInterval scrollDuration;
@@ -101,6 +100,8 @@
     _wrapEnabled = NO;
     _itemsPerPage = 1;
     _truncateFinalPage = NO;
+    _itemsToPreloadForward = 0;
+    _itemsToPreloadBackward = 0;
     _defersItemViewLoading = NO;
     _vertical = NO;
     
@@ -124,7 +125,6 @@
     _itemViews = [[NSMutableDictionary alloc] init];
     _previousItemIndex = 0;
     _previousContentOffset = _scrollView.contentOffset;
-    _previousViewFrame = _scrollView.frame;
     _scrollOffset = 0.0f;
     _currentItemIndex = 0;
     _numberOfItems = 0;
@@ -423,14 +423,14 @@
         {
             if (_vertical)
             {
-                frame = CGRectMake(0.0f, (self.frame.size.height - _itemSize.height * _itemsPerPage)/2.0f,
-                                   self.frame.size.width, _itemSize.height * _itemsPerPage);
+                frame = CGRectMake(0.0f, (self.bounds.size.height - _itemSize.height * _itemsPerPage)/2.0f,
+                                   self.bounds.size.width, _itemSize.height * _itemsPerPage);
                 contentSize.height = _itemSize.height * _numberOfItems;
             }
             else
             {
-                frame = CGRectMake((self.frame.size.width - _itemSize.width * _itemsPerPage)/2.0f,
-                                   0.0f, _itemSize.width * _itemsPerPage, self.frame.size.height);
+                frame = CGRectMake((self.bounds.size.width - _itemSize.width * _itemsPerPage)/2.0f,
+                                   0.0f, _itemSize.width * _itemsPerPage, self.bounds.size.height);
                 contentSize.width = _itemSize.width * _numberOfItems;
             }
             break;
@@ -439,13 +439,13 @@
         {
             if (_vertical)
             {
-                frame = CGRectMake(0.0f, 0.0f, self.frame.size.width, _itemSize.height * _itemsPerPage);
-                contentSize.height = _itemSize.height * _numberOfItems - (self.frame.size.height - frame.size.height);
+                frame = CGRectMake(0.0f, 0.0f, self.bounds.size.width, _itemSize.height * _itemsPerPage);
+                contentSize.height = _itemSize.height * _numberOfItems - (self.bounds.size.height - frame.size.height);
             }
             else
             {
-                frame = CGRectMake(0.0f, 0.0f, _itemSize.width * _itemsPerPage, self.frame.size.height);
-                contentSize.width = _itemSize.width * _numberOfItems - (self.frame.size.width - frame.size.width);
+                frame = CGRectMake(0.0f, 0.0f, _itemSize.width * _itemsPerPage, self.bounds.size.height);
+                contentSize.width = _itemSize.width * _numberOfItems - (self.bounds.size.width - frame.size.width);
             }
             break;
         }
@@ -954,10 +954,23 @@
             [visibleIndices addObject:@(index)];
         }
         
+        NSMutableSet *preloadedIndices = [NSMutableSet setWithCapacity:_itemsToPreloadForward + _itemsToPreloadBackward];
+        for (NSInteger i = 0; i <= _itemsToPreloadForward; i++)
+        {
+            NSInteger index = [self clampedIndex:startIndex + i];
+            [preloadedIndices addObject:@(index)];
+        }
+        
+        for (NSInteger i = 0; i <= _itemsToPreloadBackward; i++)
+        {
+            NSInteger index = [self clampedIndex:startIndex - i];
+            [preloadedIndices addObject:@(index)];
+        }
+        
         //remove offscreen views
         for (NSNumber *number in [_itemViews allKeys])
         {
-            if (![visibleIndices containsObject:number])
+            if (![visibleIndices containsObject:number] && ![preloadedIndices containsObject:number])
             {
                 UIView *view = _itemViews[number];
                 [self queueItemView:view];
@@ -968,6 +981,16 @@
         
         //add onscreen views
         for (NSNumber *number in visibleIndices)
+        {
+            UIView *view = _itemViews[number];
+            if (view == nil)
+            {
+                [self loadViewAtIndex:[number integerValue]];
+            }
+        }
+        
+        //add preloadedViews
+        for (NSNumber *number in preloadedIndices)
         {
             UIView *view = _itemViews[number];
             if (view == nil)
@@ -1002,7 +1025,7 @@
     
     //get number of items
     [self updateItemSizeAndCount];
-
+    
     //layout views
     [self setNeedsLayout];
     
@@ -1139,16 +1162,7 @@
 
 - (void)scrollViewDidScroll:(__unused UIScrollView *)scrollView
 {
-    if (!CGRectEqualToRect(_previousViewFrame, _scrollView.frame))
-    {
-        //save previous data
-        _previousContentOffset = _scrollView.contentOffset;
-        _previousViewFrame = _scrollView.frame;
-        
-        //update view and call delegate
-        [self didScroll];
-    }
-    else if (!_suppressScrollEvent)
+    if (!_suppressScrollEvent)
     {
         //stop scrolling animation
         _scrolling = NO;
