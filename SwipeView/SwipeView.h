@@ -1,7 +1,7 @@
 //
 //  SwipeView.h
 //
-//  Version 1.3.1
+//  Version 1.3.2
 //
 //  Created by Nick Lockwood on 03/09/2010.
 //  Copyright 2010 Charcoal Design
@@ -85,6 +85,8 @@ typedef NS_ENUM(NSUInteger, SwipeViewAlignment)
 @property (nonatomic, readonly, getter = isScrolling) BOOL scrolling;
 @property (nonatomic, assign) BOOL defersItemViewLoading;
 @property (nonatomic, assign, getter = isVertical) BOOL vertical;
+@property (nonatomic, assign) NSInteger itemsToPreloadForward;
+@property (nonatomic, assign) NSInteger itemsToPreloadBackward;
 
 - (void)reloadData;
 - (void)reloadItemAtIndex:(NSInteger)index;
